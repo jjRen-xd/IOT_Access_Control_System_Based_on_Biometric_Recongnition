@@ -1,0 +1,6 @@
+[root@MyLinux data]# cat /etc/mail.rc
+set from=crrcoo@sina.com
+set smtp=smtp.sina.com
+set smtp-auth-user=crrcoo@sina.com
+set smtp-auth-password=147258369.101
+set smtp-auth=login

@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/rjj/桌面/中大计赛/算法/face_v3.1/main/LinuxSerial.cpp
+LinuxSerial.hpp
+/home/rjj/桌面/中大计赛/算法/face_v3.1/main/LinuxSerial.hpp
+string
+-
+string.h
+-
+fcntl.h
+-
+sys/ioctl.h
+-
+termios.h
+-
+unistd.h
+-
+sys/types.h
+-
+sys/stat.h
+-
+stdio.h
+-
+
+/home/rjj/桌面/中大计赛/算法/face_v3.1/main/LinuxSerial.hpp
+
+/home/rjj/桌面/中大计赛/算法/face_v3.1/main/main.cpp
+iostream
+-
+stdlib.h
+-
+LinuxSerial.hpp
+/home/rjj/桌面/中大计赛/算法/face_v3.1/main/LinuxSerial.hpp
+
