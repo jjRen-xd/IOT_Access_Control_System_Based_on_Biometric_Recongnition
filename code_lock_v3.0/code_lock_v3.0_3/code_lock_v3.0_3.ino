@@ -177,14 +177,21 @@ void oled_key_or_biosignature(unsigned char choice = 0){
   if(choice == 1)
     display.setTextColor(BLACK,WHITE);
   display.println("1.Password unlock");
-    display.setTextColor(WHITE);
+
+  display.setTextColor(WHITE);
   if(choice == 2)
     display.setTextColor(BLACK,WHITE);
-  display.println("2.Fingerprint ID");
-    display.setTextColor(WHITE);
+  display.println("2.Biology unlock");
+
+  display.setTextColor(WHITE);
   if(choice == 3)
     display.setTextColor(BLACK,WHITE);
-  display.println("3.Face ID");
+  display.println("3.Finger ID");
+
+  display.setTextColor(WHITE);
+  if(choice == 4)
+    display.setTextColor(BLACK,WHITE);
+  display.println("4.Face ID");
 
   display.display();
 
@@ -193,6 +200,15 @@ void oled_key_or_biosignature(unsigned char choice = 0){
     display.setCursor(0,0); 
     display.clearDisplay();
   }
+}
+
+void oled_biology_unlocking(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.println("Press any key to exit biometrics......");
+  display.display(); 
 }
 void oled_finger_choice(unsigned char choice = 0){
   display.clearDisplay();
@@ -203,14 +219,21 @@ void oled_finger_choice(unsigned char choice = 0){
   if(choice == 1)
     display.setTextColor(BLACK,WHITE);
   display.println("1.New fingerprint");
-    display.setTextColor(WHITE);
+
+  display.setTextColor(WHITE);
   if(choice == 2)
     display.setTextColor(BLACK,WHITE);
   display.println("2.Delete fingerprint");
-    display.setTextColor(WHITE);
+
+  display.setTextColor(WHITE);
   if(choice == 3)
     display.setTextColor(BLACK,WHITE);
   display.println("3.Check the number");
+
+  display.setTextColor(WHITE);
+  if(choice == 4)
+    display.setTextColor(BLACK,WHITE);
+  display.println("4.<--Back");
 
   display.display();
 
@@ -220,12 +243,86 @@ void oled_finger_choice(unsigned char choice = 0){
     display.clearDisplay();
   }
 }
-void oled_finger_label(){
+
+void oled_face_choice(unsigned char choice = 0){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextSize(1);
+
+  display.setTextColor(WHITE);
+  if(choice == 1)
+    display.setTextColor(BLACK,WHITE);
+  display.println("1.New face");
+  
+  display.setTextColor(WHITE);
+  if(choice == 2)
+    display.setTextColor(BLACK,WHITE);
+  display.println("2.Delete face");
+
+  display.setTextColor(WHITE);
+  if(choice == 3)
+    display.setTextColor(BLACK,WHITE);
+  display.println("3.Check the number");
+
+  display.setTextColor(WHITE);
+  if(choice == 4)
+    display.setTextColor(BLACK,WHITE);
+  display.println("4.<--Back");
+
+  display.display();
+
+  if(choice != 0){
+    delay(500);
+    display.setCursor(0,0); 
+    display.clearDisplay();
+  }
+}
+
+void oled_face(unsigned int num){
   display.clearDisplay();
   display.setCursor(0,0);
   display.setTextColor(WHITE);
   display.setTextSize(1);
-  display.println("Please enter your ID:");
+  switch(num){
+    case 1:
+      display.println("Collecting Face information, please wait...");
+      break;
+    case 2:
+      display.println("Generating CSV, please wait...");
+      break;
+    case 3:
+      display.println("Training, please wait...");
+      break;
+    case 4:
+      display.println("New Face Success!!!");
+      break;
+    default:
+      break;
+  }
+  display.display(); 
+
+  if(num == 4){
+    delay(500);
+    display.setCursor(0,0); 
+    display.clearDisplay();
+  }
+}
+
+void oled_input_times(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.println("How many times has this been entered?");
+  display.display(); 
+}
+
+void oled_input_label(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.println("What is the label of this entry?");
   display.display(); 
 }
 void oled_finger_press(){
@@ -371,6 +468,30 @@ void password_unlock(){
   }
 }
 
+void biology_unlock(){
+  Serial.print('Y');  //向arduino2发送指令，开始识别
+  Serial_key.print('@');  //向arduino1发送指令，准备接收任意键返回
+  oled_biology_unlocking();
+  char data_in;
+  while(1){
+    if(Serial_key.available()>0){
+      Serial_key.read();
+      voice_input();
+
+      digitalWrite(13,LOW);//RESTE Arduino2
+      delay(100);
+      digitalWrite(13,HIGH);
+      break;
+    }
+    if(Serial.available()>0){      //Arduino2-指纹
+      data_in = Serial.read();
+      judge_Ordered(data_in); 
+      oled_biology_unlocking();
+      while(Serial.read()>=0){}//清空指纹和人脸识别结果的缓存区
+    }
+  }
+}
+
 void finger_choice(){
   char data_in;
   oled_finger_choice();
@@ -402,12 +523,93 @@ void finger_choice(){
             }
           }
           break;
+        case '4':
+          voice_input();
+          oled_finger_choice(4);
+          break;
         default:
           voice_error();
           oled_lock_error();
           break;
       }
       break;
+    }
+  }
+}
+
+void face_choice(){
+  char data_in;
+  oled_face_choice();
+  Serial_key.print('@');
+  while(1){ //接收到用户输入就返回，1有效
+    if(Serial_key.available()>0){
+      switch (data_in = Serial_key.read()){
+        case '1':
+          voice_input();
+          oled_face_choice(1);
+          new_face();
+          break;
+        case '2':
+          voice_input();
+          oled_face_choice(2);
+          break;
+        case '3':
+          voice_input();
+          oled_face_choice(3);
+          break;
+        case '4':
+          voice_input();
+          oled_face_choice(4);
+          break;
+        default:
+          voice_error();
+          oled_lock_error();
+          break;
+      }
+      break;
+    }
+  }
+}
+
+void new_face(){
+  char data_in;
+  Serial.print('Q');//发送新建人脸指令
+  while(1){
+    if(Serial.available()>0){
+      while(1){
+        switch (data_in = Serial.read()){
+          case 'S':
+            oled_input_label();
+            data_in = get_choice();
+            Serial.print(data_in);
+            oled_display(data_in,2); 
+            break;
+          case 'X':
+            oled_input_times();
+            data_in = get_choice();
+            Serial.print(data_in);
+            oled_display(data_in,2); 
+            break;
+          case 'T':
+            oled_face(1);
+            break;
+          case 'U':
+            oled_face(2);
+            break;
+          case 'V':
+            oled_face(3);
+            break;
+          case 'W':
+            oled_face(4);
+            break;
+          default:
+            break;
+        }
+        if(data_in == 'W')
+          break;
+      }
+      if(data_in == 'W')
+        break;
     }
   }
 }
@@ -421,7 +623,7 @@ void finger_judge(){
       switch (data_in)
       {
         case 91:
-          oled_finger_label();
+          oled_input_label();
           ID = get_choice();
           oled_display(ID);
           Serial.print(ID-48);
@@ -476,6 +678,8 @@ void setup(){
        
     pinMode(13,OUTPUT); //关指示灯
     digitalWrite(13,LOW);
+    delay(100);
+    digitalWrite(13,HIGH);
 
     pinMode(buzzerPin,OUTPUT);//蜂鸣器初始化
     servo_door.attach(servoPin);
@@ -493,7 +697,6 @@ void loop(){
   
   char data_in;
   Serial_key.print('@');//向主控板1发送用接收选择信息指令
-  //Serial.print('@');
   oled_key_or_biosignature();
 
   while(1){ //接收到用户输入就返回，1,2,3有效，其余交接指令判断函数处理
@@ -503,17 +706,22 @@ void loop(){
           voice_input();
           oled_key_or_biosignature(1);
           Serial_key.print('R');//向主控板1发送用密码解锁指令
-          //Serial.print('R');
           password_unlock();
           break;
         case '2':
           voice_input();
           oled_key_or_biosignature(2);
-          finger_choice();
+          biology_unlock();
           break;
         case '3':
           voice_input();
           oled_key_or_biosignature(3);
+          finger_choice();
+          break;
+        case '4':
+          voice_input();
+          oled_key_or_biosignature(4);
+          face_choice();
           break;
         default:
           voice_error();
@@ -522,15 +730,5 @@ void loop(){
       }
       break;
     }
-
-    if(Serial.available()>0){      //Arduino2-指纹
-      data_in = Serial.read();
-      //Serial.println(data_in);
-
-      judge_Ordered(data_in); 
-      break;
-    }
-
   }
-
 }   
