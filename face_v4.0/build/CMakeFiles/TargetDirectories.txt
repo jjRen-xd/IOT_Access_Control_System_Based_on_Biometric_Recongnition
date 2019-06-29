@@ -1,0 +1,3 @@
+/home/rjj/桌面/face_v4.0/build/CMakeFiles/edit_cache.dir
+/home/rjj/桌面/face_v4.0/build/CMakeFiles/rebuild_cache.dir
+/home/rjj/桌面/face_v4.0/build/CMakeFiles/face_v40.dir
