@@ -12,9 +12,10 @@ using namespace cv::face;
 #define SHOW_IMAGE
 #define SHOW_DEBUG
 
-#define COLLEDTION_TIMES 100
+#define COLLEDTION_TIMES 20//人脸收集的次数
 #define STRANGER_WEIGHT 10
 #define NORMAL_WEIGHT 5   //判断权重，值越大越可靠，识别速度越慢
+#define RECONGNISE_DISTANCE 0.3  //识别距离
 
 static void read_csv(const string& filename,vector<Mat>& images,vector<int>& labels,char separator = ';'){
     std::ifstream file(filename.c_str(),ifstream::in);
@@ -40,7 +41,7 @@ string getTime(){
     time_t timep;
     time (&timep);
     char tmp[64];
-    strftime(tmp, sizeof(tmp), "%Y-%m-%d %H:%M:%S",localtime(&timep) );
+    strftime(tmp, sizeof(tmp), "%Y-%m-%d %H:%M:%S",localtime(&timep));
     return tmp;
 }
 //检测人脸位置
@@ -56,22 +57,37 @@ std::vector<cv::Rect> Face::choice_faces_from_image(cv::Mat img){
 
 void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition){
     for(int i = 0;i<facePosition.size();i++){
-        rectangle(img,facePosition[i],Scalar(255,255,0),2,8);
+        rectangle(img,facePosition[i],Scalar(0,0,0),2,8);
     }
 }
+void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<cv::Point3f> angle){
+    for(int i = 0;i<facePosition.size();i++){
+        string text = cv::format("(%0.2f,%0.2f,%0.2f)",angle[i].x,angle[i].y,angle[i].z);
+        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,255,255));//显示解算角度
 
-void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<int> label){
+        rectangle(img,facePosition[i],Scalar(0,0,0),2,8);
+    }
+}
+void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<int> label,std::vector<cv::Point3f> angle){
+    cv::Scalar color = Scalar(0,0,255);;
     if(facePosition.size() != label.size()){
         cout<<"The size of facePositon and label is mismatch!!!"<<endl;
         return;
     }
     for(int i = 0;i<facePosition.size();i++){
-        rectangle(img,facePosition[i],Scalar(255,0,0),2,8);
-        if(label[i] == 0)
-            putText(img,"Stranger",Point(facePosition[i].x,facePosition[i].y),FONT_HERSHEY_COMPLEX,1,Scalar(0,0,255));//显示标签
+        string text = cv::format("(%0.2f,%0.2f,%0.2f)",angle[i].x,angle[i].y,angle[i].z);
+        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,255,255));//显示解算角度
 
-        else
-            putText(img,to_string(label[i]),Point(facePosition[i].x,facePosition[i].y),FONT_HERSHEY_COMPLEX,1,Scalar(0,0,255));//显示标签
+        if(label[i] == 0){
+            color = Scalar(0,0,255);
+            rectangle(img,facePosition[i],color,2,8);
+            putText(img,"Stranger",Point(facePosition[i].x,facePosition[i].y),FONT_HERSHEY_COMPLEX,1,color);//显示标签
+        }
+        else{
+            color = Scalar(0,255,0);
+            rectangle(img,facePosition[i],color,2,8);
+            putText(img,to_string(label[i]),Point(facePosition[i].x,facePosition[i].y),FONT_HERSHEY_COMPLEX,1,color);//显示标签
+        }
     }
 }
 
@@ -190,6 +206,45 @@ void Face::record_recon_data(string str,cv::Mat face_record){
     cout<<"------------------->"<<filename.c_str()<<endl;
 
 }
+// 解算人脸位置
+cv::Point3f Face::get_Ang(int center_x,int center_y,int width){
+	double calibration[9] = {
+		461.6031, 0.000000, 321.5665,
+		0.000000, 460.8121, 223.6258,
+		0.000000, 0.000000, 1.000000
+	};
+	double dist_coeffs[5] = { -0.0112, 0.0878, 0.0000, 0.0000, -0.0992 };
+	Mat cameraMatrix = Mat(3, 3, CV_64F, calibration);	//内参矩阵
+	Mat distCoeffs = Mat(5, 1, CV_64F, dist_coeffs);	//畸变系数
+	
+	vector<Point3f> object_point;
+	object_point.push_back(Point3f(-63, -63, 0.0));	//魔方宽46，以中心为原点
+	object_point.push_back(Point3f(63,  -63, 0.0));
+	object_point.push_back(Point3f(63,  63 , 0.0));
+	object_point.push_back(Point3f(-63, 63 , 0.0));
+
+	vector<Point2f> image_point;
+	image_point.push_back(Point2f(center_x - width, center_y - width));
+	image_point.push_back(Point2f(center_x + width, center_y - width));
+	image_point.push_back(Point2f(center_x + width, center_y + width));
+	image_point.push_back(Point2f(center_x - width, center_y + width));
+
+	Mat rvec = Mat::ones(3, 1, CV_64F);	//旋转矩阵
+	Mat tvec = Mat::ones(3, 1, CV_64F);	//平移矩阵
+
+	solvePnP(object_point, image_point, cameraMatrix, distCoeffs, rvec, tvec);
+	
+	double pos_x, pos_y, pos_z;
+	const double *_xyz = (const double *)tvec.data;
+	pos_z = tvec.at<double>(2) / 1000.0;
+	pos_x = atan2(_xyz[0], _xyz[2]);
+	pos_y = atan2(_xyz[1], _xyz[2]);
+	pos_x *= 180 / 3.1415926;
+	pos_y *= 180 / 3.1415926;
+
+	Point3f pos = Point3f(pos_x,pos_y,pos_z);
+	return pos;
+}
 
 bool Face::New_face(){
 
@@ -258,24 +313,60 @@ int Face::Recongnise_face(){
         equalizeHist(gray,gray);    //直方图均值化
         
         std::vector<cv::Mat> faceImgs;
-        std::vector<cv::Rect> facePositions;
-        std::vector<int> faceLabels;
+        std::vector<cv::Rect> facePositions;//人脸在图像中的位置
+        std::vector<cv::Point3f> faceAngle;//人脸在世界坐标的位置
+        std::vector<int> faceLabels;//识别成功后的人脸标签
 
         facePositions = Face::choice_faces_from_image(gray);
         Face::mark_faces(frame,facePositions);
 
+        float minDis = 1024;//在摄像头前的人脸最小距离
         for(int i = 0;i<facePositions.size();i++){
             faceImgs.push_back(gray(facePositions[i]));   //保存所有脸部信息
             if(faceImgs[i].empty())
                 continue;
+
+            //计算出每个人脸中心坐标，并进行PNP解算,找出每张脸在世界坐标的位置
+            int center_x,center_y,width;
+            center_x = (2 * facePositions[i].x + facePositions[i].width) / 2;
+            center_y = (2 * facePositions[i].y + facePositions[i].height) / 2;
+            width = facePositions[i].width;
+            faceAngle.push_back(get_Ang(center_x,center_y,width));
+            if(faceAngle[i].z < minDis)
+                minDis = faceAngle[i].z;
         }
-        faceLabels = Face::predict_faces(faceImgs,model);
-        Face::mark_faces(frame,facePositions,faceLabels);
-        
+        if(minDis < RECONGNISE_DISTANCE){   //距离到达一定距离就开始检测记录
+            cout<<"begin detect"<<endl;
+            faceLabels = Face::predict_faces(faceImgs,model);//开始预测人脸
+            Face::mark_faces(frame,facePositions,faceLabels,faceAngle);//标记
+            static std::vector<int> names_weight(Face::size()); //将每一帧识别结果格式化存储起来
+            int result = Face::judge_recon_result(faceLabels,names_weight);
+
+            if(result != -1){
+                Face::recongnise_result_label = result;
+
+                for(size_t i = 0;i<faceLabels.size();i++){//找出结果脸的实际存储位置
+                    if(faceLabels[i] == result)
+                        result = i;
+                }
+                Face::record_recon_data(Face::name_data[Face::recongnise_result_label],frame(facePositions[result]));
+            }
+        }
+        else
+            Face::mark_faces(frame,facePositions,faceAngle);
+
         #ifdef SHOW_DEBUG
-            cout<<"faces:"<<faceImgs.size()<<" positions:"<<facePositions.size()<<" labels:"<<faceLabels.size()<<endl;
+            cout<<"faceImg.size():"<<faceImgs.size();
+            cout<<" faceLabels.size():"<<faceLabels.size();
+            cout<<" facePositions.size():"<<facePositions.size();
+            cout<<" faceAngle.size():"<<faceAngle.size()<<endl;
+            for(int i = 0;i<faceImgs.size();i++){
+                cout<<"FACE_Num"<<i<<":";
+                cout<<" position:("<<facePositions[i].x<<","<<facePositions[i].y<<")";
+                cout<<" angle:("<<faceAngle[i].x<<","<<faceAngle[i].y<<","<<faceAngle[i].z<<")"<<endl<<endl;
+            }
             for(int i = 0;i<faceLabels.size();i++)
-                cout<<"label"<<i<<":"<<faceLabels[i]<<endl;
+                cout<<"label:"<<faceLabels[i]<<endl;
         #endif
         #ifdef SHOW_IMAGE
             imshow("face",frame);
@@ -285,18 +376,6 @@ int Face::Recongnise_face(){
             }
         #endif
 
-        static std::vector<int> names_weight(Face::size()); //将每一帧识别结果格式化存储起来
-        int result = Face::judge_recon_result(faceLabels,names_weight);
-
-        if(result != -1){
-            Face::recongnise_result_label = result;
-
-            for(size_t i = 0;i<faceLabels.size();i++){//找出结果脸的实际存储位置
-                if(faceLabels[i] == result)
-                    result = i;
-            }
-            Face::record_recon_data(Face::name_data[Face::recongnise_result_label],frame(facePositions[result]));
-        }
     }
 }
 

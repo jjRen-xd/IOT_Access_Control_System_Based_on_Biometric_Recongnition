@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <iostream>
 
+#include<opencv2/opencv.hpp>
 #include<opencv2/highgui.hpp>
 #include<opencv2/imgproc.hpp>
 #include<opencv2/face/facerec.hpp>
@@ -51,7 +52,8 @@ class Face{
         }
         std::vector<cv::Rect> choice_faces_from_image(cv::Mat img);
         void mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition);
-        void mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,vector<int> label);
+        void mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<cv::Point3f> angle);
+        void mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<int> label,std::vector<cv::Point3f> angle);
         bool save_face_img(cv::Mat img,std::vector<cv::Rect> facePosition);
 
         void train_face_data();
@@ -59,4 +61,5 @@ class Face{
         std::vector<int> predict_faces(std::vector<cv::Mat> faces_src,Ptr<cv::face::FaceRecognizer> &model);
         int judge_recon_result(std::vector<int> labels,std::vector<int> &names_weight);
         void record_recon_data(string str,cv::Mat face_record);
+        cv::Point3f get_Ang(int center_x,int center_y,int width);
 };
