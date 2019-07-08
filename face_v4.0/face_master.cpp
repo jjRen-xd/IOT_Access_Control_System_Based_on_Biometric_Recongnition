@@ -6,17 +6,25 @@
 #include<fstream>
 #include<sstream>
 
+#include"LinuxSerial.hpp"
+
 using namespace cv;
 using namespace std;
 using namespace cv::face;
+// #define SHOW_COLLECTED_IMAGE    //显示收集人脸的过程，大大降低效率
 #define SHOW_IMAGE
 #define SHOW_DEBUG
+#define SEND_MESSAGE_TO_ARDUINO
 
-#define COLLEDTION_TIMES 20//人脸收集的次数
+#define COLLEDTION_TIMES 5//人脸收集的次数
 #define STRANGER_WEIGHT 10
 #define NORMAL_WEIGHT 5   //判断权重，值越大越可靠，识别速度越慢
-#define RECONGNISE_DISTANCE 0.3  //识别距离
+#define RECONGNISE_DISTANCE 0.5  //识别距离
 
+ofstream ALL_RECORD_DATA("../RECORD_DATA/ALL_RECORD_DATA.txt");
+#ifdef SEND_MESSAGE_TO_ARDUINO
+    CLinuxSerial arduino(0,9600);   
+#endif
 static void read_csv(const string& filename,vector<Mat>& images,vector<int>& labels,char separator = ';'){
     std::ifstream file(filename.c_str(),ifstream::in);
     if(!file){
@@ -41,7 +49,7 @@ string getTime(){
     time_t timep;
     time (&timep);
     char tmp[64];
-    strftime(tmp, sizeof(tmp), "%Y-%m-%d %H:%M:%S",localtime(&timep));
+    strftime(tmp, sizeof(tmp), "%Y-%m-%d_%H:%M:%S",localtime(&timep));
     return tmp;
 }
 //检测人脸位置
@@ -63,7 +71,7 @@ void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition){
 void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vector<cv::Point3f> angle){
     for(int i = 0;i<facePosition.size();i++){
         string text = cv::format("(%0.2f,%0.2f,%0.2f)",angle[i].x,angle[i].y,angle[i].z);
-        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,255,255));//显示解算角度
+        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,0,255));//显示解算角度
 
         rectangle(img,facePosition[i],Scalar(0,0,0),2,8);
     }
@@ -76,7 +84,7 @@ void Face::mark_faces(cv::Mat &img,std::vector<cv::Rect> facePosition,std::vecto
     }
     for(int i = 0;i<facePosition.size();i++){
         string text = cv::format("(%0.2f,%0.2f,%0.2f)",angle[i].x,angle[i].y,angle[i].z);
-        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,255,255));//显示解算角度
+        putText(img,text,Point(facePosition[i].x+facePosition[i].width,facePosition[i].y),FONT_HERSHEY_PLAIN,1,Scalar(0,0,255));//显示解算角度
 
         if(label[i] == 0){
             color = Scalar(0,0,255);
@@ -102,10 +110,15 @@ bool Face::save_face_img(cv::Mat img,std::vector<Rect> facePosition){
         string filename = cv::format("%d.jpg",face_data[Face::size()]++);//储存名
         string path = cv::format("../face_data/s%d/%s",Face::size(),filename.c_str());//储存路径
         cv::imwrite(path,faceROI);//储存
-
-        cv::imshow(filename,faceROI);
-        cv::waitKey(20);
-        cv::destroyWindow(filename);
+        #ifdef SHOW_COLLECTED_IMAGE
+            cv::imshow(filename,faceROI);
+            cv::waitKey(20);
+            cv::destroyWindow(filename);
+        #endif
+        
+        #ifdef SHOW_DEBUG
+            cout<<"Have finished "<<face_data[Face::size()]<<"s image."<<endl;
+        #endif
         return 1;
     }
 }
@@ -201,16 +214,34 @@ int Face::judge_recon_result(std::vector<int> labels,std::vector<int> &names_wei
 
 void Face::record_recon_data(string str,cv::Mat face_record){
     string time_now = getTime();
-    string filename = cv::format("../Record_data/Faces/%s-%s.jpg",time_now.c_str(),str.c_str());//储存路径
-    imwrite(filename,face_record);//保存人脸照片
-    cout<<"------------------->"<<filename.c_str()<<endl;
+    string filename = cv::format("../RECORD_DATA/FACES/%s_%s_face.jpg",time_now.c_str(),str.c_str());//储存路径
 
+    //保存人脸照片，并生成日志文件
+    static int unlock_times = 0;
+    ofstream NEWEST_DATA("../RECORD_DATA/NEWEST_DATA.txt");
+    imwrite(filename,face_record);
+    ALL_RECORD_DATA<<"["<<++unlock_times<<"]-["<<time_now<<"]-[Name of Unlocker]:"<<str<<"-[Unlocking mode]:face unlock"<<endl; 
+    NEWEST_DATA<<"["<<time_now<<"]-[Name of Unlocker]:"<<str<<"-[Unlocking mode]:face unlock"<<endl; 
+    //发邮件提醒
+    #ifdef SEND_EMAIL
+        string command = cv::format("echo 'Someone（%s） is in the unlock range, please be vigilant!!!'| mutt -s new 1411102509@qq.com -a %s",str.c_str(),filename.c_str());
+        system(command.c_str());
+    #endif
+    //向arduino发命令开门
+    #ifdef SEND_MESSAGE_TO_ARDUINO
+        if(str != "stranger"){
+            arduino._send_data('O');    //向arduino发送开门指令
+        }
+    #endif
+    #ifdef SHOW_DEBUG
+        cout<<"send------------------->'O'*********************[Name of Unlocker]:"<<str.c_str()<<endl;
+    #endif
 }
 // 解算人脸位置
 cv::Point3f Face::get_Ang(int center_x,int center_y,int width){
 	double calibration[9] = {
-		461.6031, 0.000000, 321.5665,
-		0.000000, 460.8121, 223.6258,
+		945.2654, 0.000000, 701.7872,
+		0.000000, 945.6360, 319.5665,
 		0.000000, 0.000000, 1.000000
 	};
 	double dist_coeffs[5] = { -0.0112, 0.0878, 0.0000, 0.0000, -0.0992 };
@@ -218,10 +249,10 @@ cv::Point3f Face::get_Ang(int center_x,int center_y,int width){
 	Mat distCoeffs = Mat(5, 1, CV_64F, dist_coeffs);	//畸变系数
 	
 	vector<Point3f> object_point;
-	object_point.push_back(Point3f(-63, -63, 0.0));	//魔方宽46，以中心为原点
-	object_point.push_back(Point3f(63,  -63, 0.0));
-	object_point.push_back(Point3f(63,  63 , 0.0));
-	object_point.push_back(Point3f(-63, 63 , 0.0));
+	object_point.push_back(Point3f(-80, -80, 0.0));	//魔方宽46，以中心为原点
+	object_point.push_back(Point3f(80,  -80, 0.0));
+	object_point.push_back(Point3f(80,  80 , 0.0));
+	object_point.push_back(Point3f(-80, 80 , 0.0));
 
 	vector<Point2f> image_point;
 	image_point.push_back(Point2f(center_x - width, center_y - width));
@@ -247,13 +278,16 @@ cv::Point3f Face::get_Ang(int center_x,int center_y,int width){
 }
 
 bool Face::New_face(){
-
+    prepare_next_face();    //开辟新空间，准备存储这一次的人脸收集信息
     VideoCapture cap(0);
     if(!cap.isOpened()){
         cout<<"cap can't opened!"<<endl;
         return false;
     }
-    
+    #ifdef SEND_MESSAGE_TO_ARDUINO
+        arduino._send_data('S');    //向arduino发送放置人脸的指令
+    #endif
+
     Mat frame,gray;
     //收集人脸
     while(1){
@@ -262,23 +296,22 @@ bool Face::New_face(){
         cvtColor(frame,gray,CV_RGB2GRAY);      //灰度
         equalizeHist(gray,gray);               //直方图均值化
 
-        std::vector<Rect> facePosition = choice_faces_from_image(gray);
-        mark_faces(frame,facePosition);
-        Face::save_face_img(gray,facePosition);
-        #ifdef SHOW_IMAGE
+        std::vector<Rect> facePosition = choice_faces_from_image(gray); //获取一帧中所有的人脸位置
+        mark_faces(frame,facePosition);         //框出人脸
+        Face::save_face_img(gray,facePosition); //保存收集到的人脸
+        #ifdef SHOW_COLLECTED_IMAGE
             cv::imshow("face",frame);
             //收集途中按ESC退出
             int c = cv::waitKey(30);    
-            if((char)c == 27){
+            if((char)c == 27){  //按ESC键退出
                 cap.release();
                 break;
             }
         #endif
-        //一次收集10张人脸就退出
+        //一次收集COLLECTION_TIMES张人脸就退出
         if(Face::record_times(Face::size())>=COLLEDTION_TIMES){   
             cout<<"face_"<<Face::size()<<":collection complete"<<endl;
-            prepare_next_face();
-            cap.release();
+            cap.release();          //关闭摄像头，否则会与下一次使用cap冲突
             break;
         }
     }
@@ -287,10 +320,19 @@ bool Face::New_face(){
 
     //训练人脸数据
     Face::train_face_data();
+
+    //更新人脸数据文件
+    ofstream SAVED_FACES("../face_data/SAVED_FACES.txt");
+    for(int i = 1;i<=Face::size();i++){
+        SAVED_FACES<<Face::face_data[i]<<";"<<Face::name_data[i]<<endl;
+    }
+    #ifdef SEND_MESSAGE_TO_ARDUINO
+        arduino._send_data('W');    //向arduino发送录入成功的指令
+    #endif
     return true;
 }
 
-int Face::Recongnise_face(){
+int Face::Recongnise_face(bool times){   //识别人脸，times=1:只成功识别一次（识别多少帧由权重判断）就返回，times=0：无穷
     VideoCapture cap(0);
     if(!cap.isOpened()){
         cout<<"cap can't opened!"<<endl;
@@ -310,19 +352,19 @@ int Face::Recongnise_face(){
     while(1){
         cap>>frame;
         cvtColor(frame,gray,CV_RGB2GRAY);   //灰度
-        equalizeHist(gray,gray);    //直方图均值化
+        equalizeHist(gray,gray);            //直方图均值化
         
-        std::vector<cv::Mat> faceImgs;
+        std::vector<cv::Mat> faceImgs;      //所有的人脸像素信息
         std::vector<cv::Rect> facePositions;//人脸在图像中的位置
-        std::vector<cv::Point3f> faceAngle;//人脸在世界坐标的位置
-        std::vector<int> faceLabels;//识别成功后的人脸标签
+        std::vector<cv::Point3f> faceAngle; //人脸在世界坐标的位置
+        std::vector<int> faceLabels;        //识别成功后的人脸标签
 
-        facePositions = Face::choice_faces_from_image(gray);
+        facePositions = Face::choice_faces_from_image(gray);    //找出图像中的所有人脸位置
         Face::mark_faces(frame,facePositions);
 
-        float minDis = 1024;//在摄像头前的人脸最小距离
+        float minDis = 1024;                //在摄像头前的人脸最小距离
         for(int i = 0;i<facePositions.size();i++){
-            faceImgs.push_back(gray(facePositions[i]));   //保存所有脸部信息
+            faceImgs.push_back(gray(facePositions[i]));         //保存所有脸部信息
             if(faceImgs[i].empty())
                 continue;
 
@@ -342,10 +384,16 @@ int Face::Recongnise_face(){
             static std::vector<int> names_weight(Face::size()); //将每一帧识别结果格式化存储起来
             int result = Face::judge_recon_result(faceLabels,names_weight);
 
-            if(result != -1){
+            if(result != -1){//即已经成功识别出结果
                 Face::recongnise_result_label = result;
-
-                for(size_t i = 0;i<faceLabels.size();i++){//找出结果脸的实际存储位置
+                if(times == 1){//只识别一次，用于人脸删除
+                    #ifdef SHOW_DEBUG
+                        cout<<"Prepare to delete face "<<recongnise_result_label<<"!!!"<<endl;
+                    #endif
+                    return Face::recongnise_result_label;
+                }
+                
+                for(size_t i = 0;i<faceLabels.size();i++){//找出结果脸的在faceImgs中的位置
                     if(faceLabels[i] == result)
                         result = i;
                 }
@@ -375,7 +423,34 @@ int Face::Recongnise_face(){
                 break;
             }
         #endif
-
+        
+        if(!Face::faceReconFlag){//接收到命令就退出识别
+            cv::destroyWindow("face");
+            break;
+        }
     }
+    return 0;
 }
 
+bool Face::Delete_face(){   //删除人脸，先识别出要删除的对象，然后删除
+    int delete_Target = Face::Recongnise_face(1);
+    Face::face_data.erase(Face::face_data.begin() + delete_Target);
+    Face::name_data.erase(Face::name_data.begin() + delete_Target);
+    
+    //更新人脸数据文件
+    ofstream SAVED_FACES("../face_data/SAVED_FACES.txt");
+    for(int i = 1;i<=Face::size();i++){
+        SAVED_FACES<<Face::face_data[i]<<";"<<Face::name_data[i]<<endl; 
+    }
+    //删除存放人脸照片的文件夹
+    string command = cv::format("cd ../face_data && rm -rf s%s",delete_Target);
+    std::system(command.c_str());
+
+    //调用python脚本,更新csv文件
+    std::system("cd ../face_data && python creat_csv.py");
+
+    //重新训练人脸数据
+    Face::train_face_data();
+
+    return true;
+}
