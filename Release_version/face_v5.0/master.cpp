@@ -81,6 +81,8 @@ int main(){
 
 //通信版本
 int main(){
+   system("gnome-terminal -x bash -c 'cd ../../BLINKER/bin && sudo python3 start.py;exec bash;'");
+   system("gnome-terminal -x bash -c 'cd ../receive_arduino_data && sudo ./save_Arduino_Data;exec bash;'");
    char data_from_arduino;
    char data_from_blinker;
    string unlock_name,unlock_way;
